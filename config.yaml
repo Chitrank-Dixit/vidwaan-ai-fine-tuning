@@ -1,0 +1,22 @@
+# VidwaanAI Scripture Fine-Tuning Config
+model: "mlx-community/Meta-Llama-3-8B-Instruct-4bit"
+train: true
+data: "./data"
+adapter_path: "./adapters"
+
+# Memory Optimization Parameters (32GB M1 Guardrails)
+batch_size: 1             # Prevents memory spikes on local M1 chips
+grad_accumulation_steps: 4 # Simulates an effective batch size of 4 for smooth convergence
+num_layers: 8             # Adapts 8 transformer layers to drop backpropagation memory overhead
+iters: 600                # Style convergence baseline to avoid catastrophic forgetting
+learning_rate: 1e-5       # Low learning rate to protect pre-trained weights
+
+# LoRA Specific Dimensions
+lora_parameters:
+  rank: 8                 # Adapter dimension constraint
+  scale: 16.0             # Scaling factor for low-rank matrix adjustments
+  dropout: 0.05           # Minor regularization to prevent overfitting
+
+# Optimization Options
+grad_checkpoint: true     # Recomputes activations to trade compute for lower memory footprints
+mask_prompt: true         # Ignores user prompts during loss computation to only learn answers

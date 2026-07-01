@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  training:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scripture-training-env
+    volumes:
+      # Mount workspace directory
+      - .:/app
+      # Specific mounts for training data and output adapters
+      - ./data:/app/data
+      - ./adapters:/app/adapters
+      # Avoid host virtualenv overwriting container virtualenv
+      - /app/.venv
+      # Shared persistent named volume for Hugging Face cache
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_HOME=/root/.cache/huggingface
+      - PYTHONUNBUFFERED=1
+    stdin_open: true
+    tty: true
+
+volumes:
+  hf_cache:
+    name: scripture_hf_cache

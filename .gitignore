@@ -1,0 +1,31 @@
+# Machine Learning Artifacts & Weights
+models/
+fused_model/
+adapters/
+data/*.jsonl
+data/*.pdf
+
+# Local Environment Credentials
+.env
+.env.*
+
+# Python Environment & Virtualenvs
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# OS Specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

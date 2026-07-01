@@ -1,0 +1,82 @@
+---
+# Play 1: Boot/Verify Container on Host Mac
+- name: Boot Scripture Fine-Tuning Container
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Check if training container is running
+      ansible.builtin.command:
+        cmd: docker inspect -f '{{ "{{.State.Running}}" }}' scripture-training-env
+      register: container_running
+      failed_when: false
+      changed_when: false
+
+    - name: Boot container stack if not running
+      ansible.builtin.command:
+        cmd: docker compose up -d
+      when: container_running.stdout != "true"
+
+    - name: Wait for container to stabilize
+      ansible.builtin.pause:
+        seconds: 3
+      when: container_running.stdout != "true"
+
+# Play 2: Run workflows inside the Docker Container
+- name: Scripture Fine-Tuning Containerized Workflow
+  hosts: training_container
+  gather_facts: false
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Verify workspace directories exist inside container
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ data_dir }}"
+        - "{{ adapters_dir }}"
+
+    - name: Check if data preparation checkpoint exists
+      ansible.builtin.stat:
+        path: "{{ data_dir }}/.data_prepared.lock"
+      register: data_prep_lock
+
+    - name: Run data pre-processing script
+      ansible.builtin.command:
+        cmd: python /app/scripts/prepare_data.py
+      when: not data_prep_lock.stat.exists
+
+    - name: Create data preparation checkpoint file
+      ansible.builtin.file:
+        path: "{{ data_dir }}/.data_prepared.lock"
+        state: touch
+      when: not data_prep_lock.stat.exists
+
+    - name: Check for existing adapter checkpoint file
+      ansible.builtin.stat:
+        path: "{{ adapters_dir }}/adapters.safetensors"
+      register: adapter_checkpoint
+
+    - name: Run Fine-Tuning (Fresh Start)
+      ansible.builtin.command:
+        cmd: python /app/scripts/fine_tune_dummy.py --model "{{ model_id }}" --data "{{ data_dir }}" --iters {{ train_iters }} --lr {{ learning_rate }} --batch-size {{ batch_size }}
+      when: not adapter_checkpoint.stat.exists
+
+    - name: Run Fine-Tuning (Resume from Checkpoint)
+      ansible.builtin.command:
+        cmd: python /app/scripts/fine_tune_dummy.py --model "{{ model_id }}" --data "{{ data_dir }}" --iters {{ train_iters }} --lr {{ learning_rate }} --batch-size {{ batch_size }} --resume-adapter-file "{{ adapters_dir }}/adapters.safetensors"
+      when: adapter_checkpoint.stat.exists
+
+    - name: Verify output adapter generated successfully
+      ansible.builtin.stat:
+        path: "{{ adapters_dir }}/adapters.safetensors"
+      register: final_adapter
+
+    - name: Print workflow execution report
+      ansible.builtin.debug:
+        msg:
+          - "Data Prep Status: {{ 'Already Prepared (Skipped)' if data_prep_lock.stat.exists else 'Executed Successfully' }}"
+          - "Training Mode: {{ 'Resumed from Checkpoint' if adapter_checkpoint.stat.exists else 'Fresh Start' }}"
+          - "Adapter Output: {{ 'Success (Verified)' if final_adapter.stat.exists else 'Failed' }}"

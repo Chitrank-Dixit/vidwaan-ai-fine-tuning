@@ -1,0 +1,26 @@
+[project]
+name = "scripture-fine-tuning"
+version = "0.1.0"
+description = "A highly optimized MLX scripture fine-tuning workspace for Apple Silicon (M1)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # MLX-LM with training extras for native macOS (M1/M2/M3 GPU) acceleration
+    "mlx-lm[train]>=0.20.0; sys_platform == 'darwin'",
+    # Fallback to CPU-friendly MLX-LM inside virtualized Linux/Docker environment
+    "mlx-lm>=0.20.0; sys_platform == 'linux'",
+    "torch>=2.2.0",
+    "huggingface-hub>=0.20.0",
+    "pydantic>=2.0.0",
+    "tqdm>=4.66.0",
+    "ansible>=9.0.0",
+    "pypdf>=4.0.0",
+    "google-genai>=0.1.0",
+    "reportlab>=4.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "black>=24.0.0",
+]
