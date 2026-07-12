@@ -4,6 +4,14 @@ import sys
 import json
 import argparse
 
+# Reconfigure stdout/stderr to UTF-8 on Windows to prevent UnicodeEncodeError
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 # Set Hugging Face cache directory to workspace-local ./models directory
 # This ensures caching is bound to the host volume and survives container restarts
 os.environ["HF_HOME"] = "./models"
@@ -97,8 +105,20 @@ def get_memory_info():
     }
 
 def main():
+    # Resolve default model from config.yaml if it exists
+    default_model = "Qwen/Qwen2.5-1.5B-Instruct"
+    try:
+        import yaml
+        if os.path.exists("config.yaml"):
+            with open("config.yaml", "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f)
+                if cfg and "model" in cfg:
+                    default_model = cfg["model"]
+    except Exception:
+        pass
+
     parser = argparse.ArgumentParser(description="Phase 3 Model & Ingestion Pre-Flight Readiness Check")
-    parser.add_argument("--model", type=str, default="mlx-community/Meta-Llama-3-8B-Instruct-4bit", help="Hugging Face Model ID")
+    parser.add_argument("--model", type=str, default=default_model, help="Hugging Face Model ID")
     parser.add_argument("--data-dir", type=str, default="./data", help="Path to data directory")
     parser.add_argument("--non-interactive", action="store_true", help="Bypass approval prompt")
     args = parser.parse_args()
@@ -133,13 +153,21 @@ def main():
     
     model_ok = True
     try:
-        from mlx_lm import load
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        import torch
         print("   Loading model weights and tokenizer from local cache (or downloading if needed)...")
         # Load weights and tokenizer to confirm files and configurations are intact
-        model, tokenizer = load(args.model)
+        tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model,
+            torch_dtype=torch.float32,
+            device_map="cpu",
+            low_cpu_mem_usage=True,
+            trust_remote_code=True
+        )
         print("   ✔ Base model configuration and weight assets loaded successfully.")
     except ImportError:
-        print("   ❌ Error: mlx-lm library not found. Run 'make sync' on the host first.")
+        print("   ❌ Error: transformers library not found. Run 'make sync' on the host first.")
         model_ok = False
     except Exception as e:
         print(f"   ❌ Error loading model assets: {e}")

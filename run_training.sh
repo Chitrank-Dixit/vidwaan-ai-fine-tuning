@@ -73,7 +73,7 @@ mkdir -p data
 mkdir -p adapters
 
 # Launch training in background so we can monitor memory
-uv run mlx_lm.lora --config ./config.yaml 2>&1 | tee data/training.log &
+uv run python train.py 2>&1 | tee data/training.log &
 TRAINING_PID=$!
 
 # Spawn background memory watchdog

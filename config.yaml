@@ -1,5 +1,5 @@
 # VidwaanAI Scripture Fine-Tuning Config
-model: "mlx-community/Meta-Llama-3-8B-Instruct-4bit"
+model: "Qwen/Qwen2.5-1.5B-Instruct"
 train: true
 data: "./data"
 adapter_path: "./adapters"
@@ -8,7 +8,7 @@ adapter_path: "./adapters"
 batch_size: 1             # Prevents memory spikes on local M1 chips
 grad_accumulation_steps: 4 # Simulates an effective batch size of 4 for smooth convergence
 num_layers: 8             # Adapts 8 transformer layers to drop backpropagation memory overhead
-iters: 600                # Style convergence baseline to avoid catastrophic forgetting
+iters: 50                # Style convergence baseline to avoid catastrophic forgetting
 learning_rate: 1e-5       # Low learning rate to protect pre-trained weights
 
 # LoRA Specific Dimensions

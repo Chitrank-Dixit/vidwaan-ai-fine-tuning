@@ -27,10 +27,7 @@ echo "Target GGUF file:        ./fused_model/scripture_model.gguf"
 echo "---------------------------------------------------------"
 
 echo "Starting model weights fusion..."
-uv run mlx_lm fuse \
-  --model "$BASE_MODEL" \
-  --adapter-path ./adapters \
-  --save-path ./fused_model
+uv run python export_model.py
 
 echo ""
 echo "Model fusion completed successfully!"

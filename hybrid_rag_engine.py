@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
 import os
 import sys
+
+# Reconfigure stdout/stderr to UTF-8 on Windows to prevent UnicodeEncodeError
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 import json
 import re
 import argparse
-from mlx_lm import load, generate
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
 
 # Ensure local cache usage
 os.environ["HF_HOME"] = "./models"
@@ -104,7 +115,7 @@ def find_ontology_nodes(text, ontology_path="raw_entities.json"):
 def generate_rag_response(user_query, model, tokenizer, ontology_path="raw_entities.json", max_tokens=256):
     """
     Performs the full Hybrid RAG pipeline step: retrieves vector text, intersects ontology,
-    constructs the system context prompt, and runs adapted MLX-LM inference.
+    constructs the system context prompt, and runs adapted Hugging Face inference.
     """
     # 1. Retrieve Vector DB Scripture Snippets
     retrieved_chunks = query_vector_db(user_query)
@@ -128,7 +139,7 @@ def generate_rag_response(user_query, model, tokenizer, ontology_path="raw_entit
     ]
     
     try:
-        formatted_prompt = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
+        formatted_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     except Exception:
         # Fallback formatting
         formatted_prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{user_query}<|im_end|>\n<|im_start|>assistant\n"
@@ -139,8 +150,59 @@ def generate_rag_response(user_query, model, tokenizer, ontology_path="raw_entit
     print(f"Ontology Matches found: {matched_ontology != 'No explicit ontological records found in the text context.'}")
     print("----------------------------------\n")
     
-    response = generate(model, tokenizer, prompt=formatted_prompt, max_tokens=max_tokens)
+    inputs = tokenizer([formatted_prompt], return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=max_tokens,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.9
+        )
+        
+    input_len = inputs["input_ids"].shape[1]
+    new_tokens = outputs[0][input_len:]
+    response = tokenizer.decode(new_tokens, skip_special_tokens=True)
     return response
+
+def load_model_and_tokenizer(model_id, adapter_path=None):
+    """
+    Utility loader.
+    """
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cuda":
+        torch_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        device_map = "auto"
+    else:
+        torch_dtype = torch.float32
+        device_map = None
+        
+    base_model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        trust_remote_code=True
+    )
+    
+    if adapter_path and os.path.exists(adapter_path):
+        adapter_config_path = os.path.join(adapter_path, "adapter_config.json")
+        if os.path.exists(adapter_config_path):
+            print(f"Loading LoRA adapter from: {adapter_path}")
+            model = PeftModel.from_pretrained(base_model, adapter_path, torch_dtype=torch_dtype)
+        else:
+            print(f"⚠️ Warning: adapter_config.json not found in {adapter_path}. Running base model only.")
+            model = base_model
+    else:
+        model = base_model
+        
+    if device_map is None:
+        model = model.to(device)
+        
+    return model, tokenizer
 
 def main():
     parser = argparse.ArgumentParser(description="Hybrid RAG Architecture Integration Module")
@@ -154,11 +216,17 @@ def main():
     # Determine base model path
     model_id = args.model
     if not model_id:
-        local_path = "./models/Meta-Llama-3-8B-Instruct-4bit"
-        if os.path.exists(local_path):
-            model_id = local_path
-        else:
-            model_id = "mlx-community/Meta-Llama-3-8B-Instruct-4bit"
+        try:
+            import yaml
+            if os.path.exists("config.yaml"):
+                with open("config.yaml", "r", encoding="utf-8") as f:
+                    cfg = yaml.safe_load(f)
+                    if cfg and "model" in cfg:
+                        model_id = cfg["model"]
+        except Exception:
+            pass
+        if not model_id:
+            model_id = "Qwen/Qwen2.5-1.5B-Instruct"
 
     print("=========================================================")
     print("      HYBRID RAG INTEGRATION PIPELINE DEMONSTRATION      ")
@@ -169,7 +237,7 @@ def main():
     print("\nLoading model weights into memory...")
     
     try:
-        model, tokenizer = load(model_id, adapter_path=args.adapter_path)
+        model, tokenizer = load_model_and_tokenizer(model_id, adapter_path=args.adapter_path)
     except Exception as e:
         print(f"❌ Error loading model weights: {e}")
         sys.exit(1)
