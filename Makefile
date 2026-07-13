@@ -1,4 +1,4 @@
-.PHONY: init sync build up down logs shell playbook-syntax run-playbook generate-data generate-data-mock test-pdf clean help
+.PHONY: init sync build up down logs shell playbook-syntax run-playbook generate-data generate-data-mock test-pdf clean help test
 
 # Default target: display available commands
 help:
@@ -27,6 +27,7 @@ help:
 	@echo "  make test-interactive  - Boot interactive adapters test chat loop"
 	@echo "  make test-compare      - Run comparative diagnostics (base vs tuned model)"
 	@echo "  make test-rag          - Run Hybrid RAG pipeline validation step"
+	@echo "  make test              - Run unit, integration, and functional test suite"
 	@echo "  make fuse-model        - Merge adapters and convert model to GGUF format"
 	@echo "  make verify-fusion     - Execute validation tests on the fused model"
 	@echo "  make publish           - Upload fused model directory to Hugging Face Hub"
@@ -123,6 +124,10 @@ test-compare:
 # Execute Hybrid RAG integration pipeline test run
 test-rag:
 	uv run python hybrid_rag_engine.py
+
+# Run the unit, integration, and functional test suite
+test:
+	uv run pytest tests/
 
 # Run model weights fusion and GGUF conversion
 fuse-model:
