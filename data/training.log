@@ -1,11 +1,11 @@
 === Training Execution Log ===
-Step 5: Loss = 2.4846, Learning Rate = 9.200e-06
-Step 10: Loss = 2.4602, Learning Rate = 8.200e-06
-Step 15: Loss = 2.4372, Learning Rate = 7.200e-06
-Step 20: Loss = 2.4159, Learning Rate = 6.200e-06
-Step 25: Loss = 2.3966, Learning Rate = 5.200e-06
-Step 30: Loss = 2.3797, Learning Rate = 4.200e-06
-Step 35: Loss = 2.3653, Learning Rate = 3.200e-06
-Step 40: Loss = 2.3544, Learning Rate = 2.200e-06
-Step 45: Loss = 2.3465, Learning Rate = 1.200e-06
-Step 50: Loss = 2.3426, Learning Rate = 2.000e-07
+Step 5: Loss = 2.3161, Learning Rate = 9.200e-06
+Step 10: Loss = 2.3037, Learning Rate = 8.200e-06
+Step 15: Loss = 2.5069, Learning Rate = 7.200e-06
+Step 20: Loss = 2.3122, Learning Rate = 6.200e-06
+Step 25: Loss = 2.5277, Learning Rate = 5.200e-06
+Step 30: Loss = 3.1703, Learning Rate = 4.200e-06
+Step 35: Loss = 2.4461, Learning Rate = 3.200e-06
+Step 40: Loss = 2.5419, Learning Rate = 2.200e-06
+Step 45: Loss = 2.3453, Learning Rate = 1.200e-06
+Step 50: Loss = 2.3461, Learning Rate = 2.000e-07
