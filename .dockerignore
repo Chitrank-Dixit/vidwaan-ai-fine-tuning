@@ -13,6 +13,10 @@ unsloth_compiled_cache/
 tmp_checkpoints/
 llama.cpp/
 data/*.jsonl
+!data/eval_benchmark.jsonl
 data/*.pdf
+data/neo4j_dump_exported.json
+data/*.json
+output/neo4j_dump_exported.json
 .env
 .env.*
