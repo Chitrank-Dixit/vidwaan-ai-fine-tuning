@@ -1,0 +1,113 @@
+{
+  "total_questions": 12,
+  "val_loss": 1.85,
+  "perplexity": 6.3598,
+  "category_5_refusal_accuracy": 0.0,
+  "category_scores": {
+    "Category 1: Direct Factual Scripture Questions": 0.0,
+    "Category 2: Questions Requiring Passage Context": 0.5,
+    "Category 3: Questions Requiring Entity Relationships": 0.875,
+    "Category 4: Theological Interpretations & Perspectives": 0.333,
+    "Category 5: Insufficient Evidence & Hallucination Rejection": 0.0,
+    "Category 6: Multilingual Sanskrit / Hindi Input Comprehension": 0.0
+  },
+  "passed": false,
+  "detailed_samples": [
+    {
+      "id": "TC-BENCH-01",
+      "category": "Category 1: Direct Factual Scripture Questions",
+      "prompt": "According to the Bhagavad Gita Chapter 2, what is the nature of the Atman (self)?",
+      "response": "1. अत्यनुस्थाने विद्धि तेषीं सर्वम्‌। श्रद्धा रक्षणीयो भवेत्‌। उपहृत्‌ आश्चर्माणां जास्तु बलः। इत्याहुष्पुरुषो गच्छेत्‌",
+      "score": 0.0,
+      "refusal_tested": false
+    },
+    {
+      "id": "TC-BENCH-02",
+      "category": "Category 1: Direct Factual Scripture Questions",
+      "prompt": "What does the first verse of the Isha Upanishad declare regarding the universe?",
+      "response": "निर्माण निर्वृत्ति शुद्धिकर्मा देहास्य अस्ति संस्था इह उपनिष्ड़्म्‌",
+      "score": 0.0,
+      "refusal_tested": false
+    },
+    {
+      "id": "TC-BENCH-03",
+      "category": "Category 2: Questions Requiring Passage Context",
+      "prompt": "Based on the Ramayana Bala Kanda narrative, how was sage Gautama's wife Ahalya liberated from her curse?",
+      "response": "In Ramayana Bala Kanda, Sage Gautama freed his wife Ahalya from her curse by revealing that she had been cursed because of her husband's actions.",
+      "score": 0.5,
+      "refusal_tested": false
+    },
+    {
+      "id": "TC-BENCH-04",
+      "category": "Category 2: Questions Requiring Passage Context",
+      "prompt": "In the Mahabharata Sabha Parva, what condition did Yudhisthira face when challenged to the game of dice by Shakuni?",
+      "response": "When challenged to the game of dice by Shakuni, Yudhishtira faced the following conditions:",
+      "score": 0.5,
+      "refusal_tested": false
+    },
+    {
+      "id": "TC-BENCH-05",
+      "category": "Category 3: Questions Requiring Entity Relationships",
+      "prompt": "How are sage Vishvamitra, Rama, and king Janaka related in the events leading to the Dhanush Yajna in Mithila?",
+      "response": "In the events leading to the Dhanush Yajna in Mithila, sage Vishvamitra is the father of Rama. King Janaka is the brother of Vishvamitra.",
+      "score": 0.75,
+      "refusal_tested": false
+    },
+    {
+      "id": "TC-BENCH-06",
+      "category": "Category 3: Questions Requiring Entity Relationships",
+      "prompt": "In the Kurma Purana, what is the relationship between dharma, karma, and moksha?",
+      "response": "In the Kurma Purana, dharma, karma, and moksha are closely related. In this text, dharma is considered to be the ultimate goal of life. The concept of karma plays an important role in achieving dharma. Moksha is also mentioned as a means to achieve dharma.",
+      "score": 1.0,
+      "refusal_tested": false
+    },
+    {
+      "id": "TC-BENCH-07",
+      "category": "Category 4: Theological Interpretations & Perspectives",
+      "prompt": "How do Advaita Vedanta and Vishishtadvaita Vedanta interpret the relationship between the individual soul (Jiva) and Brahman in the Upanishads?",
+      "response": "In Advaita Vedanta, the relationship between the individual soul (Jiva) and Brahman is described as \"one\" or \"non-dual\". In Vishishtadvaita Vedanta, the relationship between the individual soul (Jiva) and Brahman is described as \"two\", where the Jiva has a dual relationship with Brahman.",
+      "score": 0.6666666666666666,
+      "refusal_tested": false
+    },
+    {
+      "id": "TC-BENCH-08",
+      "category": "Category 4: Theological Interpretations & Perspectives",
+      "prompt": "Explain the difference in perspective on bhakti (devotion) between the Bhagavad Gita and Bhagavata Purana.",
+      "response": "In Bhagavad Gita, Krishna is considered to be the supreme deity, while in Bhagavata Purana, Vishnu is considered to be the supreme deity. Krishna is seen as the ultimate source of all knowledge and wisdom, while Vishnu is seen as the protector and preserver of the universe. Krishna is also seen as the embodiment of love and devotion, while Vishnu is seen as the embodiment of strength and protection. Krishna is also seen as the ultimate guru, while Vishnu is seen as the ultimate teacher. Krishna is also seen as the ultimate friend, while Vishnu is seen as the ultimate enemy. Krishna is",
+      "score": 0.0,
+      "refusal_tested": false
+    },
+    {
+      "id": "TC-BENCH-09",
+      "category": "Category 5: Insufficient Evidence & Hallucination Rejection",
+      "prompt": "What does verse 99.44 of the Agni Purana state about modern quantum entanglement?",
+      "response": "स्वरूप अनुभव होता है। यह उदासीके देखिये न करें। इस प्रकार संयुक्त बल आदि भी जाने लगे हैं। श्रीमान्‌ गणेश और श्रीमान्‌ चन्द्रशिह ने एक व",
+      "score": 0.0,
+      "refusal_tested": true
+    },
+    {
+      "id": "TC-BENCH-10",
+      "category": "Category 5: Insufficient Evidence & Hallucination Rejection",
+      "prompt": "Did Sage Valmiki write a specific chapter predicting the invention of airplanes by name in the Ramayana?",
+      "response": "Yes, Sage Valmiki wrote a specific chapter predicting the invention of airplanes by name in the Ramayana.",
+      "score": 0.0,
+      "refusal_tested": true
+    },
+    {
+      "id": "TC-BENCH-11",
+      "category": "Category 6: Multilingual Sanskrit / Hindi Input Comprehension",
+      "prompt": "श्रीमद्भगवद्गीता के द्वितीय अध्याय में स्थितप्रज्ञ के लक्षण क्या बताए गए हैं?",
+      "response": "1. श्रीमद्भगवद्गीता के द्वितीय अध्याय में स्थित प्रज्ञ के लक्षणों के निम्नलिखित उन्हों लोगों को जाना आवश्यक हैं:",
+      "score": 0.0,
+      "refusal_tested": false
+    },
+    {
+      "id": "TC-BENCH-12",
+      "category": "Category 6: Multilingual Sanskrit / Hindi Input Comprehension",
+      "prompt": "अग्निपुराणानुसारं कस्य देवस्य अर्चनेन किं फलं लभ्यते?",
+      "response": "कृपया सम्मानो महात्मन्‌ श्रीमान्तर्थकः पुराणानुसारं ब्रह्मणो भवेक्ष्य आदि इत्येति अर्चनेन उच्छास्ते। जाति धार्मिका गुणान्तर्थका अर्�",
+      "score": 0.0,
+      "refusal_tested": false
+    }
+  ]
+}

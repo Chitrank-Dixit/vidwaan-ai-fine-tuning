@@ -1,82 +1,203 @@
-# VidwaanAI Scripture Fine-Tuning Pipeline
+# VidwaanAI Scripture Fine-Tuning Pipeline (Unsloth QLoRA)
 
-An end-to-end, highly optimized local training and validation pipeline designed to fine-tune large language models on scripture commentaries. This workspace is fully containerized via Docker and optimized bare-metal for Apple Silicon macOS (M1/M2/M3 with Unified Memory) using the MLX framework.
+An end-to-end, highly optimized local fine-tuning, validation, and evaluation pipeline designed to adapt Large Language Models on Indian scripture commentaries (Vedas, Puranas, Bhagavad Gita, Ramayana, Mahabharata).
 
-The pipeline ingests raw scripture PDFs, semantically intersects text blocks with hierarchical entity ontologies (`raw_entities.json`), generates synthetic instruction tuning datasets, audits dataset quality, executes QLoRA fine-tuning, runs comparative evaluations, integrates with Hybrid RAG architectures, and fuses weights for open-source distribution.
+This pipeline utilizes **Unsloth with QLoRA (4-bit NF4 quantization)**, **Hugging Face Transformers**, **PEFT**, and **TRL SFTTrainer** with instruction-prompt loss masking, containerized via **Podman Compose** with NVIDIA CDI passthrough and optimized for a single **NVIDIA GeForce RTX 5060 Ti (16GB VRAM, CUDA 12.x/13.x)**.
 
 ---
 
-## 🛠️ Pipeline Architecture & Flow
+## 🏛️ System Architecture & Responsibilities
 
-```mermaid
-graph TD
-    A[Scripture PDFs] --> B[generate_local_dataset.py]
-    C[raw_entities.json] --> B
-    B -->|Local LM Studio| D[data/train.jsonl & valid.jsonl]
-    D --> E[validate_local_data.py]
-    E -->|JSON Schema / Outliers / Critic Judge| F[Dataset Quality Scorecard]
-    F -->|Approved| G[check_readiness.py]
-    G -->|HF Cache Override| H[models/ Hub Cache]
-    G -->|Approved| I[run_training.sh]
-    I -->|watchdog / QLoRA MPS GPU| J[adapters/adapters.safetensors]
-    J --> K[test_adapter.py]
-    J --> L[hybrid_rag_engine.py]
-    J --> M[export_model.sh]
-    M --> N[fused_model/ Standalone weights]
-    N --> O[publish_model.py]
-    O --> P[Hugging Face Hub]
+VidwaanAI cleanly decouples fine-tuning and retrieval:
+- **Fine-Tuning Responsibility**: Optimize instruction following, domain answer structure, scripture-related reasoning patterns, and multilingual (Sanskrit/Hindi/English) token comprehension. The model is trained to reject speculative queries when evidence is absent (hallucination resistance).
+- **GraphRAG Retrieval Responsibility**: Retrieve authoritative scripture passages, exact Sanskrit/Hindi verses, and verified Neo4j entity relationships. The fine-tuned model does not replace GraphRAG or attempt to memorize the entire Neo4j database into model weights.
+
 ```
+       Scripture PDFs / Neo4j Graph Export (data/neo4j_dump_exported.json)
+                                     │
+                                     ▼
+                scripts/convert_neo4j_json_to_jsonl.py
+               (Grouped by scripture / entity cluster)
+                                     │
+          ┌──────────────────────────┼──────────────────────────┐
+          ▼                          ▼                          ▼
+    data/train.jsonl (80%)     data/valid.jsonl (10%)     data/test.jsonl (10%)
+          │                          │                          │
+          └──────────────────────────┼──────────────────────────┘
+                                     │
+                                     ▼
+                          validate_local_data.py
+                        (Pydantic v2 Schema Gate)
+                                     │
+                                     ▼
+                                  train.py
+                     ┌───────────────────────────────┐
+                     │ Unsloth FastLanguageModel     │
+                     │ 4-bit NF4 Quantization        │
+                     │ All 7 Projection Modules      │
+                     │ TRL SFTTrainer (Response-Only)│
+                     │ RTX 5060 Ti 16GB VRAM (bf16)  │
+                     └───────────────────────────────┘
+                                     │
+                                     ▼
+                          adapters/ (LoRA Weights)
+                                     │
+                   ┌─────────────────┴─────────────────┐
+                   ▼                                   ▼
+            export_model.py                     evaluate.py
+        (16-bit / 4-bit / GGUF)           (6-Category Scripture Benchmark
+                                           Loss, Perplexity, Refusal Score)
+```
+
+---
+
+## 💻 Hardware & Execution Environment
+
+- **Target GPU**: NVIDIA GeForce RTX 5060 Ti (16GB VRAM).
+- **Compute Architecture**: Blackwell / Ada / Ampere with native `bfloat16` and 4-bit tensor cores.
+- **Operating Systems**: Windows 11 with WSL2 Ubuntu / Native Linux.
+- **Containerization**: Podman and Podman Compose with Container Device Interface (CDI) (`nvidia.com/gpu=all`).
+- **Python Package Manager**: Astral `uv` (fast, deterministic environment management via `pyproject.toml` and `uv.lock`).
 
 ---
 
 ## 📁 Workspace Map
 
 ### Core Components
-- **[config.yaml](config.yaml)**: Hyperparameter manifest optimized for Apple Silicon (batch size 1, 8 active layers, gradient checkpointing, rank 8, scale 16, dropout 0.05).
-- **[pyproject.toml](pyproject.toml)**: Dependency configurations managing containerization, MLX-LM, Ansible, PyPDF, and ReportLab.
-- **[Dockerfile](Dockerfile)** / **[docker-compose.yml](docker-compose.yml)**: Multistage Python slim execution stack separating virtual environments and caching Hugging Face assets.
+- **`config.yaml`**: Single source of truth for hyperparameters (model ID, sequence length 2048, 4-bit NF4, LoRA rank 16 / alpha 16 / dropout 0.0, batch size 2, accumulation 4, learning rate 2e-4).
+- **`src/config_schema.py`**: Pydantic v2 configuration schema enforcing strict type safety and parameter boundaries.
+- **`src/dataset_schema.py`**: Pydantic v2 domain schemas for `ChatMessage`, `ScriptureConversation`, Neo4j graph dump parsing, and benchmark test cases.
+- **`Containerfile`** / **`compose.yaml`**: Rootless Podman Compose container stack based on CUDA 12.4 runtime.
+- **`pyproject.toml`**: Dependency manifests locking PyTorch, Unsloth, Transformers, PEFT, TRL, BitsAndBytes, and Ruff.
 
-### Step-by-Step Executables
-1. **[init_workspace.sh](init_workspace.sh)**: Environmental health checks and workspace bootstrap diagnostics.
-2. **[generate_local_dataset.py](generate_local_dataset.py)**: Extracts scripture text, aligns key terms with the ontology schema, and requests local LM Studio endpoints to generate conversational `.jsonl` fine-tuning sets.
-3. **[validate_local_data.py](validate_local_data.py)**: The Validation Gate. Audits JSON structures, filters outliers, scores records via a local Mistral critic judge, and isolates errors in `data/corrupted.jsonl`.
-4. **[check_readiness.py](check_readiness.py)**: Ingests model weight configurations, checks memory allocations, and caches models in the local `./models/` folder.
-5. **[run_training.sh](run_training.sh)**: Training execution script equipped with an active cgroup/macOS memory watchdog to protect hardware from OOM kernel crashes.
-6. **[test_adapter.py](test_adapter.py)**: Command-line interface hosting character-streaming inference and side-by-side un-tuned vs fine-tuned comparative evaluations.
-7. **[hybrid_rag_engine.py](hybrid_rag_engine.py)**: Integration wrapper demonstrating retrieval-grounded inference by combining Mock Vector DB search, ontology metadata queries, and local model generation.
-8. **[export_model.sh](export_model.sh)**: Fuses LoRA adapter weights natively into base model weights inside `./fused_model/`.
-9. **[verify_fused_output.py](verify_fused_output.py)**: Post-fusion gate checks confirming standalone weights load and generate text cleanly.
-10. **[publish_model.py](publish_model.py)**: Connects to HF Hub, initializes repositories, and uploads fused models.
+### Executables
+1. **`scripts/convert_neo4j_json_to_jsonl.py`**: Extracts graph entities and verses from `data/neo4j_dump_exported.json`, clustering by scripture to guarantee **zero cross-split passage leakage** across `train.jsonl`, `valid.jsonl`, and `test.jsonl`.
+2. **`validate_local_data.py`**: The Pydantic v2 validation gate. Verifies role sequences (`system`? -> `user` -> `assistant`), non-empty content, isolates corrupted samples into `data/corrupted.jsonl`, and calculates token distribution.
+3. **`check_readiness.py`**: Pre-flight diagnostic inspecting CUDA availability, 16GB VRAM headroom, compute capability, bfloat16 support, and dataset file health.
+4. **`train.py`**: Supervised Fine-Tuning engine utilizing Unsloth's `FastLanguageModel`, 4-bit NF4 quantization, and TRL's `SFTTrainer` with `train_on_responses_only` loss masking.
+5. **`evaluate.py`**: Evaluates adapters against the 6-category scripture benchmark (`data/eval_benchmark.jsonl`), calculating validation loss, perplexity, and Category 5 hallucination refusal accuracy.
+6. **`test_adapter.py`**: Non-blocking character-streaming CLI inference interface and side-by-side base model vs. fine-tuned adapter evaluator.
+7. **`export_model.py`**: Merges LoRA adapters into base weights and exports in 16-bit float, 4-bit merged, or GGUF quantization formats.
 
 ---
 
 ## ⚡ Quick Start Command Reference
 
-All pipeline steps are orchestrated through the `Makefile`:
+All pipeline steps can be executed via `make` or directly via `uv`:
 
-### Setup & Caches
-- `make init`: Set script permissions and run diagnostic check.
-- `make sync`: Synchronize python dependencies via `uv sync` on the host.
-- `make build` / `make up`: Build and launch the Docker container stack.
+### 1. Environment Synchronization
+```bash
+# Sync local Python environment
+make sync
+# or
+uv sync
+```
 
-### Pipeline Execution
-- `make test-pdf`: Compiles a mock scripture PDF containing ontology names under `data/test_scripture.pdf`.
-- `make generate-data-local`: Processes PDFs and queries your local LM Studio instance to write datasets.
-- `make validate-data`: Runs structural and semantic QA evaluations on your datasets.
-- `make check-readiness`: Ingests model weights and runs pre-flight hardware memory checks.
-- `make train`: Runs the QLoRA local training execution loop (saves adapters to `./adapters/`).
-- `make test-compare`: Generates side-by-side prompt responses from the base model vs. the fine-tuned adapter.
-- `make test-rag`: Executes a retrieval-augmented generation test run combining vector DB contexts.
-- `make fuse-model`: Merges weights natively into `fused_model/` in 4-bit format.
-- `make verify-fusion`: Compiles and tests the standalone fused weights.
-- `make publish`: Uploads the standalone model folder and Hugging Face README Model Card to the Hugging Face Hub.
-- `make clean`: Resets the workspace directory (clears locks, generated datasets, adapters, and logs).
+### 2. Data Engineering & Leak-Free Splitting
+```bash
+# Ingest Neo4j export and generate leak-free train/valid/test splits
+make split-data
+
+# Audit dataset files against Pydantic v2 schema
+make validate-data
+```
+
+### 3. Pre-Flight Diagnostic Check
+```bash
+# Run hardware and dataset integrity check
+make check-readiness
+```
+
+### 4. Fine-Tuning (Unsloth QLoRA)
+```bash
+# Start SFT training loop
+make train
+
+# Resume training from an existing checkpoint
+uv run python train.py --config config.yaml --resume ./tmp_checkpoints/checkpoint-25
+```
+
+### 5. 6-Category Benchmark Evaluation
+```bash
+# Run benchmark evaluation against trained adapter
+make evaluate
+
+# Run headless evaluation in mock/test mode
+make evaluate-mock
+```
+
+### 6. Streaming Inference & Comparative Diagnostic
+```bash
+# Run side-by-side comparison (base model vs tuned adapter)
+make test-compare
+
+# Test single prompt streaming
+uv run python test_adapter.py --prompt "What does the text from Bhagavad Gita state regarding the nature of Atman?"
+```
+
+### 7. Model Fusion & Multi-Format Export
+```bash
+# Export 16-bit merged weights
+make fuse-model
+
+# Export directly to GGUF (Q4_K_M)
+uv run python export_model.py --format gguf --quantization q4_k_m
+```
+
+### 8. Testing & Linting
+```bash
+# Run complete test suite (41 tests)
+make test
+
+# Run Ruff linter and formatter
+make lint
+```
 
 ---
 
-## 🛡️ Apple Silicon Memory Guardrails
+## 🐳 Podman Container Execution
 
-Finetuning large model weights on a single local GPU requires strict resource configurations to ensure OS stability:
-- **Gradient Checkpointing (`grad_checkpoint: true`):** Reduces active memory overhead by recalculating tensors during backward passes instead of caching them.
-- **Selective Layer Tuning (`num_layers: 8`):** Restricts updates to the top 8 transformer layers to drop activation footprints.
-- **Unified Memory Watchdog:** In `run_training.sh`, a background watchdog polls macOS memory pages. If available memory (free + inactive + speculative pages) falls below 1 GB, it sends a `SIGTERM` to the training process, flushing memory allocations safely without file corruption.
+To run inside a fully isolated Podman container with NVIDIA GPU passthrough:
+
+### Prerequisites
+1. Podman 5.0+ installed with NVIDIA Container Device Interface (CDI):
+   ```bash
+   podman info | grep -A 2 discoveredDevices
+   # Should list: nvidia.com/gpu=all
+   ```
+2. Build and run via Podman Compose:
+   ```bash
+   # Build container image
+   podman compose build
+
+   # Run readiness check inside container
+   podman compose run --rm app uv run python check_readiness.py
+
+   # Execute fine-tuning inside container
+   podman compose run --rm app uv run python train.py --config config.yaml
+   ```
+
+---
+
+## 📊 Evaluation Categories (`data/eval_benchmark.jsonl`)
+
+The evaluation suite tests 6 distinct scripture capabilities:
+1. **Direct Factual Scripture Questions**: Direct queries testing knowledge of canonical verses.
+2. **Questions Requiring Passage Context**: Queries evaluating comprehension of specific episodic scripture contexts.
+3. **Questions Requiring Entity Relationships**: Queries evaluating relationships between sages, deities, kings, and locations.
+4. **Theological Interpretations & Perspectives**: Queries comparing theological schools (Advaita vs. Vishishtadvaita).
+5. **Insufficient Evidence & Hallucination Rejection**: Queries asking about modern unscriptural concepts where the model **must refuse** rather than hallucinate.
+6. **Multilingual Sanskrit / Hindi Input Comprehension**: Queries in Devanagari Hindi and Sanskrit evaluating cross-lingual token alignment.
+
+Evaluation results are saved as structured reports:
+- `reports/evaluation_report.json`
+- `reports/evaluation_report.md`
+
+---
+
+## 🛡️ Memory & Safety Guardrails (16GB RTX 5060 Ti)
+
+1. **4-Bit NF4 Quantization**: Base weights loaded in 4-bit with double quantization, reducing base model memory to ~1.2 GB for a 1.5B parameter model.
+2. **Gradient Checkpointing (`grad_checkpoint: true`)**: Activation tensors recomputed during backpropagation, reducing activation memory overhead by ~60%.
+3. **Gradient Accumulation (`batch_size: 2`, `grad_accumulation_steps: 4`)**: Simulates an effective batch size of 8 while keeping peak memory under 6GB VRAM.
+4. **Response-Only Masking (`train_on_responses_only`)**: User prompts are masked with `-100` label IDs so loss is only calculated on assistant answers.

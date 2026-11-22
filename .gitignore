@@ -2,6 +2,8 @@
 models/
 fused_model/
 adapters/
+unsloth_compiled_cache/
+tmp_checkpoints/
 data/*.jsonl
 data/*.pdf
 

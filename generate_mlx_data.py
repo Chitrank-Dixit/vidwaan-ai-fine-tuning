@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-import os
-import re
-import json
-import glob
-import random
 import argparse
-from pypdf import PdfReader
+import glob
+import json
+import os
+import random
+import re
+
 from google import genai
 from google.genai import types
+from pypdf import PdfReader
+
 
 def load_ontology(ontology_path):
     """
@@ -17,13 +19,14 @@ def load_ontology(ontology_path):
     print(f"Loading ontology from: {ontology_path}")
     if not os.path.exists(ontology_path):
         raise FileNotFoundError(f"Ontology file not found at {ontology_path}")
-    
+
     with open(ontology_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    
+
     nodes = data.get("nodes", [])
     print(f"Successfully loaded {len(nodes)} ontology nodes.")
     return nodes
+
 
 def extract_text_from_pdfs(pdf_paths):
     """
@@ -34,7 +37,7 @@ def extract_text_from_pdfs(pdf_paths):
         print(f"Extracting text from PDF: {path}")
         try:
             reader = PdfReader(path)
-            for i, page in enumerate(reader.pages):
+            for _i, page in enumerate(reader.pages):
                 text = page.extract_text()
                 if text:
                     full_text_parts.append(text)
@@ -43,6 +46,7 @@ def extract_text_from_pdfs(pdf_paths):
             print(f"Error reading PDF {path}: {e}")
     return "\n\n".join(full_text_parts)
 
+
 def segment_text(text, chunk_size=900):
     """
     Segments raw text into clean, sequential chunks of approx chunk_size words.
@@ -50,10 +54,11 @@ def segment_text(text, chunk_size=900):
     words = text.split()
     chunks = []
     for i in range(0, len(words), chunk_size):
-        chunk_words = words[i:i + chunk_size]
+        chunk_words = words[i : i + chunk_size]
         chunks.append(" ".join(chunk_words))
     print(f"Segmented text into {len(chunks)} chunks (approx. {chunk_size} words each).")
     return chunks
+
 
 def find_intersecting_metadata(text_chunk, ontology_nodes):
     """
@@ -61,27 +66,27 @@ def find_intersecting_metadata(text_chunk, ontology_nodes):
     """
     matching_nodes = []
     text_lower = text_chunk.lower()
-    
+
     for node in ontology_nodes:
         node_id = node.get("id")
         node_name = node.get("name")
-        
+
         # Candidate keywords to check (ignoring None or empty values)
         candidates = {node_id, node_name}
         candidates = {c for c in candidates if c}
-        
+
         matched = False
         for cand in candidates:
             cand_lower = cand.lower()
             # Handle underscores commonly found in ontology IDs
             cand_space = cand_lower.replace("_", " ")
-            
+
             # Simple substring check first for speed
             if cand_lower in text_lower or cand_space in text_lower:
                 # Use regex with word boundaries to avoid false positives (e.g. matching "he" inside "here")
-                pattern_cand = r'\b' + re.escape(cand_lower) + r'\b'
-                pattern_space = r'\b' + re.escape(cand_space) + r'\b'
-                
+                pattern_cand = r"\b" + re.escape(cand_lower) + r"\b"
+                pattern_space = r"\b" + re.escape(cand_space) + r"\b"
+
                 if re.search(pattern_cand, text_lower) or re.search(pattern_space, text_lower):
                     matched = True
                     break
@@ -89,16 +94,19 @@ def find_intersecting_metadata(text_chunk, ontology_nodes):
                 elif not cand_lower.isalnum():
                     matched = True
                     break
-        
+
         if matched:
-            matching_nodes.append({
-                "id": node.get("id"),
-                "name": node.get("name"),
-                "type": node.get("type"),
-                "description": node.get("attributes", {}).get("description", "")
-            })
-            
+            matching_nodes.append(
+                {
+                    "id": node.get("id"),
+                    "name": node.get("name"),
+                    "type": node.get("type"),
+                    "description": node.get("attributes", {}).get("description", ""),
+                }
+            )
+
     return matching_nodes
+
 
 def sanitize_llm_json_lines(response_text):
     """
@@ -110,19 +118,19 @@ def sanitize_llm_json_lines(response_text):
         line = line.strip()
         if not line:
             continue
-        
+
         # Skip markdown code fence markers if the model generates them
         if line.startswith("```"):
             continue
-            
+
         try:
             # Find the starting and ending indices of the JSON object
             start = line.find("{")
             end = line.rfind("}")
             if start != -1 and end != -1:
-                json_str = line[start:end+1]
+                json_str = line[start : end + 1]
                 data = json.loads(json_str)
-                
+
                 # Verify that it matches the MLX conversational structure
                 if "messages" in data and isinstance(data["messages"], list):
                     messages = data["messages"]
@@ -131,11 +139,12 @@ def sanitize_llm_json_lines(response_text):
                         roles = {m.get("role") for m in messages}
                         if "user" in roles and "assistant" in roles:
                             records.append(data)
-        except Exception as e:
+        except Exception:
             # Log parsing errors but do not crash the pipeline
             pass
-            
+
     return records
+
 
 def generate_records_for_chunk(client, chunk, matching_metadata):
     """
@@ -163,62 +172,109 @@ Do not include markdown code fences, trailing text, or preamble."""
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.3,
-                system_instruction="You are a strict QA record generator. Your output must only contain valid JSON lines in the requested format."
-            )
+                system_instruction="You are a strict QA record generator. Your output must only contain valid JSON lines in the requested format.",
+            ),
         )
         return sanitize_llm_json_lines(response.text or "")
     except Exception as e:
         print(f"Error during LLM API call: {e}")
         return []
 
+
 def generate_mock_records_for_chunk(chunk, matching_metadata):
     """
     Generates mock QA records locally based on matched ontology metadata.
     """
     records = []
-    
+
     # 1. Factual/Textual Question
     words = chunk.split()
     first_few_words = " ".join(words[:15]) if len(words) > 15 else chunk
-    records.append({
-        "messages": [
-            {"role": "user", "content": f"Based on the text passage, what is mentioned near the start: '{first_few_words}'?"},
-            {"role": "assistant", "content": f"The passage opens by discussing or describing: '{first_few_words}'."}
-        ]
-    })
-    
+    records.append(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": f"Based on the text passage, what is mentioned near the start: '{first_few_words}'?",
+                },
+                {
+                    "role": "assistant",
+                    "content": f"The passage opens by discussing or describing: '{first_few_words}'.",
+                },
+            ]
+        }
+    )
+
     # 2. Conceptual/Relational Questions based on matched ontology nodes
-    for idx, node in enumerate(matching_metadata[:4]): # limit to 4 to make exactly 5 records max
+    for _idx, node in enumerate(matching_metadata[:4]):  # limit to 4 to make exactly 5 records max
         name = node.get("name") or node.get("id")
         node_type = node.get("type", "concept")
         description = node.get("description", "Not described.")
-        
-        records.append({
-            "messages": [
-                {"role": "user", "content": f"How is the {node_type} '{name}' defined in the scripture ontology?"},
-                {"role": "assistant", "content": f"In the scriptural ontology, '{name}' is a {node_type} described as: {description}"}
-            ]
-        })
-        
+
+        records.append(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"How is the {node_type} '{name}' defined in the scripture ontology?",
+                    },
+                    {
+                        "role": "assistant",
+                        "content": f"In the scriptural ontology, '{name}' is a {node_type} described as: {description}",
+                    },
+                ]
+            }
+        )
+
     # Ensure we have at least 5 records
     while len(records) < 5:
-        records.append({
-            "messages": [
-                {"role": "user", "content": "What is the significance of the scripture passage presented in this chunk?"},
-                {"role": "assistant", "content": "The scripture passage provides vital narrative and context regarding ancient sages, characters, and events detailed in the ontology."}
-            ]
-        })
-        
+        records.append(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "What is the significance of the scripture passage presented in this chunk?",
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "The scripture passage provides vital narrative and context regarding ancient sages, characters, and events detailed in the ontology.",
+                    },
+                ]
+            }
+        )
+
     return records[:5]
+
 
 def main():
     parser = argparse.ArgumentParser(description="Ontology-Driven Scripture PDF Dataset Pipeline")
-    parser.add_argument("--ontology", type=str, default="ontology.json", help="Path to ontology JSON file")
-    parser.add_argument("--pdf-dir", type=str, default=".", help="Directory to search for source PDF files")
-    parser.add_argument("--output-dir", type=str, default="data", help="Directory to save train.jsonl and valid.jsonl")
-    parser.add_argument("--chunk-size", type=int, default=900, help="Approximate word chunk size for text segmentation")
-    parser.add_argument("--seed", type=int, default=42, help="Seed value for deterministic dataset shuffling and splitting")
-    parser.add_argument("--mock-llm", action="store_true", help="Simulate LLM QA generation without calling the API")
+    parser.add_argument(
+        "--ontology", type=str, default="ontology.json", help="Path to ontology JSON file"
+    )
+    parser.add_argument(
+        "--pdf-dir", type=str, default=".", help="Directory to search for source PDF files"
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="data",
+        help="Directory to save train.jsonl and valid.jsonl",
+    )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=900,
+        help="Approximate word chunk size for text segmentation",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Seed value for deterministic dataset shuffling and splitting",
+    )
+    parser.add_argument(
+        "--mock-llm", action="store_true", help="Simulate LLM QA generation without calling the API"
+    )
     args = parser.parse_args()
 
     # Load .env manually if present in current, parent, or sibling directories
@@ -240,7 +296,9 @@ def main():
     # Verify Gemini API configuration
     api_key_set = bool(os.environ.get("GEMINI_API_KEY"))
     if not api_key_set and not args.mock_llm:
-        print("WARNING: GEMINI_API_KEY environment variable is not set. API calls will fail unless credential helper is configured.")
+        print(
+            "WARNING: GEMINI_API_KEY environment variable is not set. API calls will fail unless credential helper is configured."
+        )
 
     # 1. Load ontology definitions
     try:
@@ -252,22 +310,26 @@ def main():
     # 2. Collect PDF source files
     pdf_pattern = os.path.join(args.pdf_dir, "**", "*.pdf")
     pdf_paths = glob.glob(pdf_pattern, recursive=True)
-    
+
     # Check alternate common directories if none found in root
     if not pdf_paths:
         for alt_dir in ["data", "pdfs"]:
             pdf_paths.extend(glob.glob(os.path.join(alt_dir, "**", "*.pdf"), recursive=True))
-            
+
     if not pdf_paths:
-        print("Error: No PDF files found to parse. Please place your scripture PDFs in the repository directory, './data/', or './pdfs/'.")
+        print(
+            "Error: No PDF files found to parse. Please place your scripture PDFs in the repository directory, './data/', or './pdfs/'."
+        )
         return
-        
+
     print(f"Found {len(pdf_paths)} PDF file(s) to process.")
 
     # 3. Extract text page-by-page
     raw_text = extract_text_from_pdfs(pdf_paths)
     if not raw_text.strip():
-        print("Error: Extracted text is empty. Verify that your PDF files contain selectable text elements.")
+        print(
+            "Error: Extracted text is empty. Verify that your PDF files contain selectable text elements."
+        )
         return
     print(f"Total words extracted from PDF(s): {len(raw_text.split())}")
 
@@ -278,7 +340,7 @@ def main():
     client = None
     if not args.mock_llm and api_key_set:
         client = genai.Client()
-    
+
     all_generated_records = []
 
     # 6. Loop chunks, intersect metadata, and generate QA
@@ -287,7 +349,7 @@ def main():
         print(f"\nProcessing chunk {idx + 1}/{len(chunks)}...")
         matching_metadata = find_intersecting_metadata(chunk, ontology_nodes)
         print(f"Found {len(matching_metadata)} intersecting ontology entities.")
-        
+
         # Request QA generation from Gemini 2.0 or simulate it
         if args.mock_llm or not api_key_set:
             if not api_key_set and not args.mock_llm:
@@ -295,7 +357,7 @@ def main():
             records = generate_mock_records_for_chunk(chunk, matching_metadata)
         else:
             records = generate_records_for_chunk(client, chunk, matching_metadata)
-            
+
         print(f"Generated {len(records)} valid dataset records for this chunk.")
         all_generated_records.extend(records)
 
@@ -328,10 +390,11 @@ def main():
             for record in valid_set:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
         print(f"Saved {len(valid_set)} records to: {valid_path}")
-        
+
         print("\nDataset pipeline execution completed successfully!")
     except Exception as e:
         print(f"Error saving output dataset files: {e}")
+
 
 if __name__ == "__main__":
     main()

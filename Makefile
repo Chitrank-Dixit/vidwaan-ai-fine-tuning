@@ -1,151 +1,100 @@
-.PHONY: init sync build up down logs shell playbook-syntax run-playbook generate-data generate-data-mock test-pdf clean help test
+.PHONY: init sync build up down logs shell split-data validate-data check-readiness train evaluate evaluate-mock test-compare fuse-model clean help test
 
 # Default target: display available commands
 help:
 	@echo "========================================================================"
-	@echo "              Scripture Fine-Tuning Workspace CLI                       "
+	@echo "          VidwaanAI Scripture Fine-Tuning Pipeline (Unsloth QLoRA)      "
 	@echo "========================================================================"
-	@echo "Workspace Orchestration (Docker & Local):"
-	@echo "  make init              - Run workspace setup script (health checks)"
-	@echo "  make sync              - Synchronize host Python dependencies using uv"
-	@echo "  make build             - Build/rebuild Docker Compose image"
+	@echo "Container Orchestration (Podman):"
+	@echo "  make build             - Build Podman container image via compose.yaml"
 	@echo "  make up                - Spin up the container stack in detached mode"
 	@echo "  make down              - Bring down the container stack"
 	@echo "  make logs              - View container execution logs"
 	@echo "  make shell             - Attach an interactive bash shell to the container"
 	@echo ""
-	@echo "Dataset Generation Pipeline:"
-	@echo "  make test-pdf          - Generate a scripture-like test PDF file locally"
-	@echo "  make generate-data     - Parse PDFs and generate MLX conversational dataset (Gemini)"
-	@echo "  make generate-data-mock- Run Gemini dataset generator in mock mode"
-	@echo "  make generate-data-local- Parse PDFs and generate MLX conversational dataset (LM Studio)"
-	@echo "  make generate-data-local-mock - Run LM Studio dataset generator in mock mode"
-	@echo "  make validate-data     - Audit dataset quality using LM Studio critic"
-	@echo "  make validate-data-mock- Audit dataset quality in mock mode (no connection needed)"
-	@echo "  make check-readiness   - Ingest base model and run hardware pre-flight checks"
-	@echo "  make train             - Execute local QLoRA fine-tuning training loop"
-	@echo "  make test-interactive  - Boot interactive adapters test chat loop"
-	@echo "  make test-compare      - Run comparative diagnostics (base vs tuned model)"
-	@echo "  make test-rag          - Run Hybrid RAG pipeline validation step"
-	@echo "  make test              - Run unit, integration, and functional test suite"
-	@echo "  make fuse-model        - Merge adapters and convert model to GGUF format"
-	@echo "  make verify-fusion     - Execute validation tests on the fused model"
-	@echo "  make publish           - Upload fused model directory to Hugging Face Hub"
+	@echo "Data Engineering:"
+	@echo "  make split-data        - Convert Neo4j dump to leak-free train/valid/test splits"
+	@echo "  make validate-data     - Audit dataset schema and structure via Pydantic v2"
 	@echo ""
-	@echo "Workflow Automation (Ansible):"
-	@echo "  make playbook-syntax   - Run syntax verification on the Ansible playbook"
-	@echo "  make run-playbook      - Execute the Ansible orchestration workflow"
+	@echo "Training & Evaluation:"
+	@echo "  make check-readiness   - Inspect CUDA GPU, 16GB VRAM, and dataset integrity"
+	@echo "  make train             - Execute Unsloth QLoRA 4-bit SFT training loop"
+	@echo "  make evaluate          - Run 6-category scripture benchmark evaluation"
+	@echo "  make evaluate-mock     - Run 6-category benchmark evaluation in mock/test mode"
+	@echo "  make test-compare      - Run side-by-side comparison of base model vs adapter"
+	@echo "  make fuse-model        - Merge adapters into standalone weights (16bit/4bit/GGUF)"
 	@echo ""
-	@echo "Cleanup:"
-	@echo "  make clean             - Reset locks, datasets, mock PDFs, and temporary states"
+	@echo "Quality Assurance:"
+	@echo "  make test              - Run Pytest test suite"
+	@echo "  make lint              - Run Ruff linter and formatter checks"
+	@echo "  make clean             - Reset temporary checkpoints, locks, and logs"
 	@echo "========================================================================"
-
-# Run workspace setup script
-init:
-	@chmod +x init_workspace.sh
-	@./init_workspace.sh
 
 # Sync host dependencies
 sync:
 	uv sync
 
-# Build Docker containers
+# Build Podman containers
 build:
-	docker compose build
+	podman compose build
 
-# Start Docker containers
+# Start Podman containers
 up:
-	docker compose up -d
+	podman compose up -d
 
-# Stop Docker containers
+# Stop Podman containers
 down:
-	docker compose down
+	podman compose down
 
 # Tail container logs
 logs:
-	docker compose logs -f
+	podman compose logs -f
 
 # Attach bash shell to running container
 shell:
-	docker compose exec -it training bash
+	podman compose exec -it app bash
 
-# Verify Ansible playbook syntax
-playbook-syntax:
-	uv run ansible-playbook -i ansible/inventory.ini ansible/playbook.yml --syntax-check
+# Data splitting
+split-data:
+	uv run python scripts/convert_neo4j_json_to_jsonl.py
 
-# Run Ansible workflow orchestration
-run-playbook:
-	uv run ansible-playbook -i ansible/inventory.ini ansible/playbook.yml
-
-# Generate a scripture-like test PDF file locally
-test-pdf:
-	uv run python scripts/create_test_pdf.py
-
-# Parse PDFs and generate MLX conversational dataset (Gemini)
-generate-data:
-	uv run python generate_mlx_data.py
-
-# Run Gemini dataset generator in mock mode
-generate-data-mock:
-	uv run python generate_mlx_data.py --mock-llm
-
-# Parse PDFs and generate MLX conversational dataset (LM Studio)
-generate-data-local:
-	uv run python generate_local_dataset.py
-
-# Run LM Studio dataset generator in mock mode
-generate-data-local-mock:
-	uv run python generate_local_dataset.py --mock-fallback
-
-# Run dataset quality validator (LM Studio)
+# Data validation
 validate-data:
 	uv run python validate_local_data.py
 
-# Run dataset quality validator in mock mode (no connection needed)
-validate-data-mock:
-	uv run python validate_local_data.py --mock-judge
-
-# Run pre-flight readiness checks (ingests model and verifies constraints)
+# Pre-flight readiness
 check-readiness:
 	uv run python check_readiness.py
 
-# Run local QLoRA fine-tuning training loop
+# Fine-tuning training
 train:
-	./run_training.sh
+	uv run python train.py --config config.yaml
 
-# Run interactive adapter test loop (streams characters dynamically)
-test-interactive:
-	uv run python test_adapter.py
+# Benchmark evaluation
+evaluate:
+	uv run python evaluate.py
 
-# Run comparative evaluation of base model vs fine-tuned adapter model
+# Headless mock benchmark evaluation
+evaluate-mock:
+	uv run python evaluate.py --mock
+
+# Side-by-side inference test
 test-compare:
-	uv run python test_adapter.py --compare --prompt "Who freed Ahalya from her long curse?"
+	uv run python test_adapter.py --compare
 
-# Execute Hybrid RAG integration pipeline test run
-test-rag:
-	uv run python hybrid_rag_engine.py
-
-# Run the unit, integration, and functional test suite
-test:
-	uv run pytest tests/
-
-# Run model weights fusion and GGUF conversion
+# Merge & Export
 fuse-model:
-	./export_model.sh
+	uv run python export_model.py --config config.yaml --format 16bit
 
-# Execute validation checks on the fused model artifacts
-verify-fusion:
-	uv run python verify_fused_output.py
+# Testing
+test:
+	uv run pytest tests/ -v
 
-# Publish standalone fused model to Hugging Face Hub
-publish:
-	uv run python publish_model.py
+# Linting
+lint:
+	uv run ruff check .
+	uv run ruff format --check .
 
-# Clean up temporary state and build artifacts
+# Clean temporary states
 clean:
-	@echo "Resetting workspace state..."
-	rm -f data/.data_prepared.lock data/train.jsonl data/valid.jsonl data/test_scripture.pdf data/corrupted.jsonl data/training.log
-	rm -rf adapters/*
-	rm -rf fused_model/*
-	@echo "Workspace state cleared."
-
+	rm -rf tmp_checkpoints .pytest_cache

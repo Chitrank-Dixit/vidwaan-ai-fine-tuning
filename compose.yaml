@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: vidwaan-unsloth-trainer
+    user: "1000:1000"
+    working_dir: /app
+    volumes:
+      - .:/app:Z
+      - hf_cache:/home/appuser/.cache/huggingface:Z
+    environment:
+      - HF_HOME=/home/appuser/.cache/huggingface
+      - HF_TOKEN=${HF_TOKEN:-}
+      - PYTHONUNBUFFERED=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    devices:
+      - nvidia.com/gpu=all
+    stdin_open: true
+    tty: true
+
+volumes:
+  hf_cache:
+    name: vidwaan_hf_cache

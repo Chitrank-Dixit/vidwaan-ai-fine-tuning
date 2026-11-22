@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-import os
-import re
-import json
-import glob
-import random
 import argparse
+import glob
+import json
+import os
+import random
+import re
 import urllib.request
+
 from pypdf import PdfReader
+
 
 def load_ontology(ontology_path):
     """
@@ -18,17 +20,18 @@ def load_ontology(ontology_path):
         if os.path.exists("ontology.json"):
             print("raw_entities.json not found. Falling back to ontology.json.")
             ontology_path = "ontology.json"
-            
+
     print(f"Loading ontology from: {ontology_path}")
     if not os.path.exists(ontology_path):
         raise FileNotFoundError(f"Ontology file not found at {ontology_path}")
-    
+
     with open(ontology_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    
+
     nodes = data.get("nodes", [])
     print(f"Successfully loaded {len(nodes)} ontology nodes.")
     return nodes
+
 
 def extract_text_from_pdfs(pdf_paths):
     """
@@ -47,6 +50,7 @@ def extract_text_from_pdfs(pdf_paths):
             print(f"Error reading PDF {path}: {e}")
     return "\n\n".join(full_text_parts)
 
+
 def segment_text(text, chunk_size=900):
     """
     Segments raw text into sequential blocks of approximately 800-1000 words.
@@ -54,10 +58,11 @@ def segment_text(text, chunk_size=900):
     words = text.split()
     chunks = []
     for i in range(0, len(words), chunk_size):
-        chunk_words = words[i:i + chunk_size]
+        chunk_words = words[i : i + chunk_size]
         chunks.append(" ".join(chunk_words))
     print(f"Segmented text into {len(chunks)} blocks (approx. {chunk_size} words each).")
     return chunks
+
 
 def find_semantic_intersections(text_block, ontology_nodes):
     """
@@ -66,26 +71,26 @@ def find_semantic_intersections(text_block, ontology_nodes):
     """
     matching_nodes = []
     text_lower = text_block.lower()
-    
+
     for node in ontology_nodes:
         node_id = node.get("id")
         node_name = node.get("name")
-        
+
         # Candidate names to search
         candidates = {node_id, node_name}
         candidates = {c for c in candidates if c}
-        
+
         matched = False
         for cand in candidates:
             cand_lower = cand.lower()
             cand_space = cand_lower.replace("_", " ")
-            
+
             # Fast substring search
             if cand_lower in text_lower or cand_space in text_lower:
                 # Verify exact word boundaries to prevent matching subsets (e.g. matching "he" inside "here")
-                pattern_cand = r'\b' + re.escape(cand_lower) + r'\b'
-                pattern_space = r'\b' + re.escape(cand_space) + r'\b'
-                
+                pattern_cand = r"\b" + re.escape(cand_lower) + r"\b"
+                pattern_space = r"\b" + re.escape(cand_space) + r"\b"
+
                 if re.search(pattern_cand, text_lower) or re.search(pattern_space, text_lower):
                     matched = True
                     break
@@ -93,16 +98,19 @@ def find_semantic_intersections(text_block, ontology_nodes):
                 elif not cand_lower.isalnum():
                     matched = True
                     break
-                    
+
         if matched:
-            matching_nodes.append({
-                "id": node.get("id"),
-                "name": node.get("name"),
-                "type": node.get("type"),
-                "description": node.get("attributes", {}).get("description", "")
-            })
-            
+            matching_nodes.append(
+                {
+                    "id": node.get("id"),
+                    "name": node.get("name"),
+                    "type": node.get("type"),
+                    "description": node.get("attributes", {}).get("description", ""),
+                }
+            )
+
     return matching_nodes
+
 
 def sanitize_json_lines(response_text):
     """
@@ -114,27 +122,32 @@ def sanitize_json_lines(response_text):
         line = line.strip()
         if not line:
             continue
-            
+
         # Strip markdown fences if present
         if line.startswith("```"):
             continue
-            
+
         try:
             start = line.find("{")
             end = line.rfind("}")
             if start != -1 and end != -1:
-                json_str = line[start:end+1]
+                json_str = line[start : end + 1]
                 data = json.loads(json_str)
-                
+
                 # Verify schema: {"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}
-                if "messages" in data and isinstance(data["messages"], list) and len(data["messages"]) >= 2:
+                if (
+                    "messages" in data
+                    and isinstance(data["messages"], list)
+                    and len(data["messages"]) >= 2
+                ):
                     roles = {m.get("role") for m in data["messages"]}
                     if "user" in roles and "assistant" in roles:
                         records.append(data)
         except Exception:
             pass
-            
+
     return records
+
 
 def call_local_lm_studio(base_url, model_name, text_block, matching_metadata):
     """
@@ -165,19 +178,16 @@ Ontological Node Metadata:
         "model": model_name,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content}
+            {"role": "user", "content": user_content},
         ],
-        "temperature": 0.3
+        "temperature": 0.3,
     }
-    
+
     headers = {"Content-Type": "application/json"}
     req = urllib.request.Request(
-        endpoint_url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST"
+        endpoint_url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST"
     )
-    
+
     try:
         # 60 second timeout for local inference
         with urllib.request.urlopen(req, timeout=90) as response:
@@ -191,6 +201,7 @@ Ontological Node Metadata:
         print(f"Connection to local LM Studio failed: {e}")
         return []
 
+
 def generate_mock_dataset_records(chunk, matching_metadata):
     """
     Generates mock QA records locally to verify the pipeline structure if LM Studio is not active.
@@ -198,48 +209,79 @@ def generate_mock_dataset_records(chunk, matching_metadata):
     records = []
     words = chunk.split()
     first_few_words = " ".join(words[:15]) if len(words) > 15 else chunk
-    
+
     # 1. Textual Question
-    records.append({
-        "messages": [
-            {"role": "user", "content": f"What is introduced at the beginning of this passage: '{first_few_words}'?"},
-            {"role": "assistant", "content": f"The scriptural passage opens by introducing: '{first_few_words}'."}
-        ]
-    })
-    
+    records.append(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": f"What is introduced at the beginning of this passage: '{first_few_words}'?",
+                },
+                {
+                    "role": "assistant",
+                    "content": f"The scriptural passage opens by introducing: '{first_few_words}'.",
+                },
+            ]
+        }
+    )
+
     # 2. Relational Questions
     for node in matching_metadata[:4]:
         name = node.get("name") or node.get("id")
         node_type = node.get("type", "Concept")
         desc = node.get("description", "defined in the sacred lore.")
-        
-        records.append({
-            "messages": [
-                {"role": "user", "content": f"Who or what is '{name}' in this scriptural context?"},
-                {"role": "assistant", "content": f"Based on the ontology, '{name}' is a {node_type} described as: {desc}"}
-            ]
-        })
-        
+
+        records.append(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"Who or what is '{name}' in this scriptural context?",
+                    },
+                    {
+                        "role": "assistant",
+                        "content": f"Based on the ontology, '{name}' is a {node_type} described as: {desc}",
+                    },
+                ]
+            }
+        )
+
     while len(records) < 5:
-        records.append({
-            "messages": [
-                {"role": "user", "content": "What details can we draw from the surrounding context?"},
-                {"role": "assistant", "content": "The scripture outlines historical, geographical, and relational connections among key figures."}
-            ]
-        })
-        
+        records.append(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "What details can we draw from the surrounding context?",
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "The scripture outlines historical, geographical, and relational connections among key figures.",
+                    },
+                ]
+            }
+        )
+
     return records[:5]
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Local Ontology-Driven QA Generation via LM Studio")
-    parser.add_argument("--ontology", type=str, default="raw_entities.json", help="Path to raw_entities.json")
+    parser = argparse.ArgumentParser(
+        description="Local Ontology-Driven QA Generation via LM Studio"
+    )
+    parser.add_argument(
+        "--ontology", type=str, default="raw_entities.json", help="Path to raw_entities.json"
+    )
     parser.add_argument("--pdf-dir", type=str, default=".", help="Directory to search for PDFs")
     parser.add_argument("--output-dir", type=str, default="data", help="Output directory")
     parser.add_argument("--base-url", type=str, default=None, help="LM Studio base URL")
     parser.add_argument("--model", type=str, default=None, help="LM Studio target model")
     parser.add_argument("--chunk-size", type=int, default=900, help="Word block chunk size")
     parser.add_argument("--seed", type=int, default=42, help="Splitting seed")
-    parser.add_argument("--mock-fallback", action="store_true", help="Use local mock QA if server connection fails")
+    parser.add_argument(
+        "--mock-fallback", action="store_true", help="Use local mock QA if server connection fails"
+    )
     args = parser.parse_args()
 
     # Load environment settings manually
@@ -261,9 +303,11 @@ def main():
 
     # Resolve settings (priority: Arg -> Env -> Default)
     base_url = args.base_url or env_vars.get("LMSTUDIO_BASE_URL") or "http://localhost:1234"
-    model_name = args.model or env_vars.get("LMSTUDIO_MODEL") or "mistralai/mistral-7b-instruct-v0.3"
+    model_name = (
+        args.model or env_vars.get("LMSTUDIO_MODEL") or "mistralai/mistral-7b-instruct-v0.3"
+    )
 
-    print(f"Configuring local LM Studio connection:")
+    print("Configuring local LM Studio connection:")
     print(f"  Base URL:     {base_url}")
     print(f"  Target Model: {model_name}")
 
@@ -279,11 +323,13 @@ def main():
     if not pdf_paths:
         for alt_dir in ["data", "pdfs"]:
             pdf_paths.extend(glob.glob(os.path.join(alt_dir, "**", "*.pdf"), recursive=True))
-            
+
     if not pdf_paths:
-        print("Error: No scripture PDF files found. Place PDFs in current folder, './data/', or './pdfs/'.")
+        print(
+            "Error: No scripture PDF files found. Place PDFs in current folder, './data/', or './pdfs/'."
+        )
         return
-        
+
     print(f"Found {len(pdf_paths)} scripture PDF file(s).")
 
     # 3. Extract text
@@ -303,21 +349,23 @@ def main():
         print(f"\nProcessing scripture block {idx + 1}/{len(blocks)}...")
         matching_metadata = find_semantic_intersections(block, ontology_nodes)
         print(f"Found {len(matching_metadata)} intersecting ontology entities in block.")
-        
+
         # Run local LM Studio inference
         records = call_local_lm_studio(base_url, model_name, block, matching_metadata)
-        
+
         # Fallback to local mock if connection failed or returned empty and fallback is enabled
         if not records and args.mock_fallback:
             print("Falling back to local mock QA generator for this block...")
             records = generate_mock_dataset_records(block, matching_metadata)
-            
+
         print(f"Generated {len(records)} valid dataset lines.")
         all_generated_lines.extend(records)
 
     print(f"\nTotal validated dataset lines generated: {len(all_generated_lines)}")
     if not all_generated_lines:
-        print("Error: No dataset lines generated. Ensure LM Studio server is running or pass --mock-fallback.")
+        print(
+            "Error: No dataset lines generated. Ensure LM Studio server is running or pass --mock-fallback."
+        )
         return
 
     # 6. Stratified Train/Valid Splitting (85% train / 15% valid)
@@ -344,10 +392,11 @@ def main():
             for rec in valid_set:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         print(f"Saved {len(valid_set)} records to: {valid_path}")
-        
+
         print("\nLocal dataset generation pipeline completed successfully!")
     except Exception as e:
         print(f"Error saving output datasets: {e}")
+
 
 if __name__ == "__main__":
     main()
